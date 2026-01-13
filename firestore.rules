@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users collection - users can only read/write their own data
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Talent profiles - readable by all authenticated users, writable by owner
+    match /talent/{talentId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(talentId);
+    }
+    
+    // Client profiles - readable by all authenticated users, writable by owner
+    match /clients/{clientId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(clientId);
+    }
+    
+    // Projects - readable by project participants, writable by client
+    match /projects/{projectId} {
+      allow read: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        request.auth.uid in resource.data.talentIds
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        request.auth.uid in resource.data.talentIds
+      );
+      allow delete: if isAuthenticated() && resource.data.clientId == request.auth.uid;
+    }
+    
+    // Assessments - readable by owner, writable by owner
+    match /assessments/{assessmentId} {
+      allow read: if isAuthenticated() && resource.data.talentId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.talentId == request.auth.uid;
+    }
+    
+    // Matches - readable by participants
+    match /matches/{matchId} {
+      allow read: if isAuthenticated() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.talentId == request.auth.uid
+      );
+      allow create: if isAuthenticated();
+    }
+  }
+}
+
+
